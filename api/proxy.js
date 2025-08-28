@@ -3,11 +3,6 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 module.exports = (req, res) => {
   // 初始目标地址
   let target = "https://github.com/";
-  
-  // 1. 替换目标地址中的github.com为gh.houheya.us.kg
-  if (target.includes("github.com")) {
-    target = target.replace("github.com", "gh.houheya.us.kg");
-  }
 
   // 可选：根据请求路径切换代理目标（保持原有注释逻辑）
   // if (
