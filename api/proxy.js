@@ -1,9 +1,8 @@
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 module.exports = (req, res) => {
-  let target = "https://github.com/"; // 目标代理地址
+  let target = "https://github.com/";
 
-  // 创建代理实例
   const proxy = createProxyMiddleware({
     target,
     changeOrigin: true,
@@ -13,42 +12,42 @@ module.exports = (req, res) => {
 
   // 处理代理响应
   proxy.on("proxyRes", (proxyRes, req, res) => {
-    let body = [];
-    // 收集响应数据
-    proxyRes.on("data", (chunk) => {
-      body.push(chunk);
-    });
-
-    // 响应完成后处理
+    const chunks = [];
+    proxyRes.on("data", (chunk) => chunks.push(chunk));
     proxyRes.on("end", () => {
-      const contentType = proxyRes.headers["content-type"] || "";
-      let responseBody = Buffer.concat(body).toString("utf8");
+      try {
+        // 合并响应内容
+        const buffer = Buffer.concat(chunks);
+        let body = buffer.toString("utf8");
 
-      // 只处理HTML内容
-      if (contentType.includes("text/html")) {
-        // 替换图片路径中的github.com
-        responseBody = responseBody.replace(
-          /https?:\/\/github\.com/g,
-          "https://gh.houheya.us.kg"
-        );
-        // 替换文字中的github.com
-        responseBody = responseBody.replace(/github\.com/g, "gh.houheya.us.kg");
+        // 替换所有github.com相关内容
+        body = body.replace(/https?:\/\/github\.com/g, "https://gh.houheya.us.kg");
+        body = body.replace(/github\.com/g, "gh.houheya.us.kg");
+
+        // 更新响应头（避免内容长度不匹配）
+        delete proxyRes.headers["content-length"];
+        res.setHeader("Content-Length", Buffer.byteLength(body, "utf8"));
+
+        // 复制原始响应头并发送处理后的内容
+        Object.entries(proxyRes.headers).forEach(([key, value]) => {
+          res.setHeader(key, value);
+        });
+        res.statusCode = proxyRes.statusCode;
+        res.end(body);
+      } catch (err) {
+        console.error("Proxy error:", err);
+        res.statusCode = 500;
+        res.end("Proxy server error");
       }
-
-      // 移除可能导致内容长度不匹配的header
-      delete proxyRes.headers["content-length"];
-
-      // 复制原始响应头
-      Object.keys(proxyRes.headers).forEach((key) => {
-        res.setHeader(key, proxyRes.headers[key]);
-      });
-
-      // 发送处理后的响应
-      res.statusCode = proxyRes.statusCode;
-      res.end(responseBody);
     });
   });
 
-  // 执行代理
+  // 处理代理错误
+  proxy.on("error", (err) => {
+    console.error("Proxy connection error:", err);
+    res.statusCode = 500;
+    res.end("Proxy connection failed");
+  });
+
   proxy(req, res);
 };
