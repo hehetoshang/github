@@ -1,75 +1,46 @@
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 module.exports = (req, res) => {
-  let target = "https://github.com/";//your website url
+  // 目标网站 - 默认是GitHub
+  const target = "https://github.com/";
   
-  // 简化版代理配置，解决超时问题
-  createProxyMiddleware({
+  // 创建最简单的代理配置，优先保证速度和避免超时
+  const proxy = createProxyMiddleware({
     target,
     changeOrigin: true,
-    followRedirects: true,
-    timeout: 30000, // 30秒超时设置
+    xfwd: true, // 传递原始请求头信息
     
-    // 简化的URL重写配置
-    pathRewrite: {
-      '^/': '/',
-    },
-    
-    // 简化版响应处理，只处理文本内容
+    // 移除任何可能导致延迟的复杂处理
     onProxyRes: function(proxyRes, req, res) {
-      const contentType = proxyRes.headers['content-type'] || '';
+      // 只进行最基本的响应头处理，不修改响应体
+      // 这可以极大减少处理时间，避免Vercel的10秒超时
       
-      // 只处理文本/html内容，避免处理所有类型
-      if (contentType.includes('text/html')) {
-        // 收集响应数据
-        let body = [];
-        proxyRes.on('data', function(chunk) {
-          body.push(chunk);
-        });
-        
-        proxyRes.on('end', function() {
-          try {
-            // 转换为字符串
-            body = Buffer.concat(body).toString('utf8');
-            
-            // 进行链接替换，但使用更简单的正则表达式
-            const modifiedBody = body
-              .replace(/https?:\/\/github\.com/g, 'https://gh.houheya.us.kg')
-              .replace(/\/\/github\.com/g, 'https://gh.houheya.us.kg')
-              .replace(/github\.com/g, 'gh.houheya.us.kg');
-            
-            // 更新响应头
-            delete proxyRes.headers['content-length'];
-            
-            // 发送修改后的响应
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.send(modifiedBody);
-          } catch (error) {
-            console.error('Error processing response:', error);
-            // 出错时回退到原始响应
-            res.send(body);
-          }
-        });
-        
-        // 暂停原始流
-        proxyRes.pause();
-      } else {
-        // 对于非HTML内容，直接传递
-        proxyRes.pipe(res);
-      }
+      // 保留原始响应的所有头部信息
+      Object.keys(proxyRes.headers).forEach(function(key) {
+        res.setHeader(key, proxyRes.headers[key]);
+      });
     },
     
-    selfHandleResponse: true,
-    
-    // 配置请求头
+    // 简化请求处理
     onProxyReq: function(proxyReq, req, res) {
-      proxyReq.setHeader('Cache-Control', 'no-cache');
+      // 只添加必要的请求头
+      proxyReq.setHeader('X-Forwarded-Proto', 'https');
     },
     
-    // 错误处理
+    // 快速错误处理
     onError: function(err, req, res) {
       console.error('Proxy error:', err);
-      res.status(502).send('Proxy Error: ' + err.message);
-    }
-  })(req, res);
+      // 快速返回错误响应，避免长时间等待
+      res.status(502).send('Proxy Error');
+    },
+    
+    // 禁用响应体处理以提高速度
+    selfHandleResponse: false,
+    
+    // Vercel的超时限制是10秒，所以设置一个更短的超时以避免被强制终止
+    timeout: 8000 // 8秒超时，留出缓冲时间
+  });
+  
+  // 立即执行代理，不做任何预处理
+  proxy(req, res);
 };
