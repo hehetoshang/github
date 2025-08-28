@@ -1,23 +1,23 @@
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
 module.exports = (req, res) => {
-  let target = "https://github.com/";//your website url
-  //   if (
-  //     req.url.startsWith("/api") ||
-  //     req.url.startsWith("/auth") ||
-  //     req.url.startsWith("/banner") ||
-  //     req.url.startsWith("/CollegeTask")
-  //   ) {
-  //     target = "http://106.15.2.32:6969";
-  //   }
-
-  createProxyMiddleware({
+  let target = "https://github.com/"; // 默认目标
+  
+  // 创建代理中间件
+  const proxy = createProxyMiddleware({
     target,
     changeOrigin: true,
-    pathRewrite: {
-      // rewrite request path `/backend`
-      //  /backend/user/login => http://google.com/user/login
-      //   "^/backend/": "/",
+    pathRewrite: function(path, req) {
+      // 将路径中的 github.com 替换为 gh.houheya.us.kg
+      return path.replace(/github\.com/g, 'gh.houheya.us.kg');
     },
-  })(req, res);
+    onProxyReq: (proxyReq, req, res) => {
+      // 修改请求头中的Host
+      if (req.url.includes('github.com')) {
+        proxyReq.setHeader('Host', 'gh.houheya.us.kg');
+      }
+    }
+  });
+
+  return proxy(req, res);
 };
